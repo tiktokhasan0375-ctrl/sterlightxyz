@@ -1,30 +1,41 @@
-StarLight + FZPay — Vercel সেটআপ
+StarLight + FZ PAY Gateway (Vercel)
+==================================
 
-১. আগের Secret Key প্রকাশিত হয়েছে। FZPay থেকে নতুন Secret Key তৈরি করুন।
-২. এই প্রজেক্ট Vercel-এ Import করুন।
-৩. Settings → Environment Variables-এ দিন:
+এই প্রজেক্টে মূল StarLight index.html-এর ডিজাইন/অন্যান্য ফিচার অপরিবর্তিত রাখা হয়েছে। bKash/Nagad ডিপোজিটের বর্তমান /api/create-deposit কলটি FZ PAY সার্ভার API-তে পাঠানোর জন্য Vercel serverless backend যুক্ত করা হয়েছে। Binance-এর আগের লিংক/পদ্ধতি অপরিবর্তিত।
 
-FZ_APP_ID = আপনার Merchant App ID
-FZ_SECRET = নতুন Secret Key
+GitHub-এ আপলোড
+--------------
+1. ZIP Extract করুন।
+2. ZIP-এর ভেতরের index.html, package.json, vercel.json, api ফোল্ডার এবং README ফাইলগুলো repository-এর root-এ আপলোড করুন।
+3. Vercel-এ repository Import/Deploy করুন।
+
+Vercel > Settings > Environment Variables-এ যোগ করুন:
+------------------------------------------------------
+FZ_APP_ID = FZ1E7369189F45
+FZ_SECRET = Merchant Dashboard থেকে নতুন/rotate করা Secret Key (পুরোনো চ্যাটে দেওয়া key ব্যবহার করবেন না)
 FZ_API = https://fzpay.site/api.php
-APP_BASE_URL = https://আপনার-সাইট.vercel.app
-FZ_CALLBACK_URL = https://আপনার-সাইট.vercel.app/api/fzpay-callback
+APP_BASE_URL = https://আপনার-সাইটের-domain
+FZ_CALLBACK_URL = https://আপনার-সাইটের-domain/api/fzpay-callback
 FIREBASE_DATABASE_URL = https://pay-admin-98aca-default-rtdb.firebaseio.com
-FIREBASE_SERVICE_ACCOUNT = Firebase Admin service-account সম্পূর্ণ JSON
-FZ_DEPOSIT_CREDIT_POLICY = net
+FIREBASE_SERVICE_ACCOUNT = Firebase Admin service account-এর সম্পূর্ণ JSON এক লাইনে
+FZ_DEPOSIT_CREDIT_POLICY = gross
 
-৪. Firebase Console → Project Settings → Service Accounts থেকে Admin SDK JSON তৈরি করুন।
-   JSON শুধু Vercel Environment Variable-এ রাখবেন; HTML/GitHub-এ নয়।
-৫. Deploy করে নিজের আসল domain বসিয়ে APP_BASE_URL ও FZ_CALLBACK_URL আপডেট করে আবার Deploy করুন।
-৬. FZPay-কে callback URL অনুমোদন করতে দিন এবং প্রয়োজন হলে server-এর outbound public IP whitelist করুন।
-   সাধারণ Vercel deployment-এ স্থায়ী outbound IP নাও থাকতে পারে; fixed IP বাধ্যতামূলক হলে static egress বা fixed-IP hosting লাগবে।
-৭. প্রথমে ছোট অঙ্কে পরীক্ষা করুন।
+FZ_DEPOSIT_CREDIT_POLICY:
+- gross: callback-এর amount অনুযায়ী ইউজারের ব্যালেন্সে জমা হবে।
+- net: callback-এর net_amount অনুযায়ী জমা হবে।
 
-Verified FZPay callback সফল হলে users/{phone}.balance একবারই বাড়ে এবং deposits/{orderNo}
-ইতিহাসে Success হয়। Failed callback-এ ব্যালেন্স বাড়ে না। Browser return দেখে কখনো
-ব্যালেন্স যোগ হয় না। net policy-তে gateway fee বাদ দিয়ে টাকা যোগ হয়; gross policy-তে
-পুরো amount যোগ হয়।
+তারপর Vercel-এ Redeploy করুন।
 
-এই প্রজেক্টে bKash/Nagad deposit আছে; withdrawal নেই। বর্তমান HTML-এর login phone
-localStorage থেকে আসে, তাই বড় অঙ্কের live payment-এর আগে Firebase Authentication
-token verification যোগ করা উচিত।
+গুরুত্বপূর্ণ
+-----------
+- FZ_APP_ID এবং FZ_SECRET আপনার merchant dashboard থেকে নিতে হবে। এখানে placeholder দেওয়া হয়নি।
+- Firebase Console > Project Settings > Service Accounts থেকে Admin SDK private key JSON তৈরি করুন। JSON কখনো GitHub-এ আপলোড করবেন না; শুধু Vercel Environment Variable-এ রাখবেন।
+- FZ PAY-তে callback URL approve এবং merchant server IP whitelist করতে হতে পারে। Vercel-এর outbound IP স্থায়ী নাও হতে পারে; FZ PAY-কে Vercel-compatible whitelist বা fixed-egress সমাধান নিশ্চিত করতে বলুন।
+- আপনার বর্তমান HTML-এ custom login/localStorage-ভিত্তিক session আছে, Firebase Authentication ID token নেই। তাই API-তে phone পাঠানোটি পূর্ণ user authentication নয়। বাস্তব অর্থ চালুর আগে Firebase Authentication/ID-token যাচাই যুক্ত করা আবশ্যক; নইলে কেউ request পরিবর্তন করে অন্য account-এর phone পাঠাতে পারে।
+- আগের Secret Key/password যদি কোথাও চ্যাট বা GitHub-এ প্রকাশ হয়ে থাকে, নতুন key/password তৈরি করুন।
+- প্রথমে ছোট অঙ্কে sandbox/test transaction চালিয়ে callback, credited amount, fee এবং duplicate callback যাচাই করুন।
+
+
+পরিবেশ ভেরিয়েবল নমুনা
+---------------------
+ZIP-এর .env.example ফাইলে App ID ও প্রয়োজনীয় ভেরিয়েবলের নমুনা আছে। Secret Key এবং Firebase Admin JSON শুধু Vercel Environment Variables-এ দিন; GitHub-এ দেবেন না।
