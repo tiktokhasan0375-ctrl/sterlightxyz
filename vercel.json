@@ -1,0 +1,6 @@
+{
+  "functions": {
+    "api/create-deposit.js": { "maxDuration": 120 },
+    "api/fzpay-callback.js": { "maxDuration": 30 }
+  }
+}
