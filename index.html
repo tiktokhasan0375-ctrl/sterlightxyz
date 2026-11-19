@@ -1587,7 +1587,7 @@ button:focus-visible,[role="button"]:focus-visible{outline:2px solid #c69a45!imp
 
     <div id="starlight-loader" role="status" aria-label="Loading StarLight">
         <div class="loader-content">
-            <img class="loader-image" src="https://i.ibb.co.com/pjPsLhF2/file-00000000190c8211bfcc4a8e331c0980.png" alt="StarLight loading screen">
+            <img class="loader-image" src="https://i.ibb.co.com/Q3SH1Byj/file-0000000037108211b1097825b5205d85.png" alt="StarLight loading screen">
         </div>
     </div>
 
@@ -1740,6 +1740,7 @@ button:focus-visible,[role="button"]:focus-visible{outline:2px solid #c69a45!imp
                     <div class="sl-game-row">
                         <div class="sl-game-card" onclick="playGame('Pragmatic Play')"><img src="https://i.ibb.co.com/pBP9qRGZ/811.png" alt="Mega Ace"><span class="sl-game-caption"></span></div>
                         <div class="sl-game-card" onclick="playGame('Pragmatic Play')"><img src="https://files.catbox.moe/5qw81v.jpg" alt="Go Rush"><span class="sl-game-caption"></span></div>
+                        <div class="sl-game-card" onclick="playGame('Tower Jackpot')"><img src="https://i.ibb.co.com/twRKS48k/232.png" alt="Tower Jackpot"><span class="sl-game-caption"></span></div>
                     </div>
                 </section>
 
@@ -2772,8 +2773,8 @@ button:focus-visible,[role="button"]:focus-visible{outline:2px solid #c69a45!imp
         };
 
         const gatewayLinks = { 
-            // bKash and Nagad use the secure server-side FZPay API.
-            // Binance keeps its original gateway.
+            bkash: "https://bdapicasoier5gopaylive-bgp-1-cc-4-e.vercel.app/", 
+            nagad: "https://bdapicashier5gopaylive-ngp-1-cc-4-e.vercel.app/", 
             binance: atob("aHR0cHM6Ly9ic2piZGRqLnZlcmNlbC5hcHAv") 
         };
         
@@ -3847,50 +3848,125 @@ button:focus-visible,[role="button"]:focus-visible{outline:2px solid #c69a45!imp
             });
         };
         
-        window.goFinalDep = async function() { 
-            const dAmtEl = document.getElementById("d-amt");
-            const amt = dAmtEl ? dAmtEl.value : "";
-            const phone = localStorage.getItem("userPhone"); 
-            const min = "binance" === selectedDepM ? 1 : Number(adminRuntimeLimits.min_deposit ?? 100); 
-            const sym = "binance" === selectedDepM ? "$" : "৳"; 
-            if (!phone) return showToast("Please login first");
-            if (!amt || Number(amt) < min) return showToast(`❌ Minimum deposit ${sym}${min}`);
-            if (selectedDepM !== "binance" && Number(adminRuntimeLimits.max_deposit) > 0 && Number(amt) > Number(adminRuntimeLimits.max_deposit)) return showToast(`❌ Maximum deposit ৳${adminRuntimeLimits.max_deposit}`);
-            if (selectedDepM === "binance") {
-                const link = gatewayLinks.binance;
-                if (!link) return showToast("❌ Gateway link not found");
-                showToast("Redirecting to Gateway...");
-                setTimeout(() => { window.location.href = `${link}?amount=${encodeURIComponent(amt)}&user=${encodeURIComponent(phone)}` }, 800);
-                return;
-            }
-            const method = selectedDepM === "bkash" ? "BKASH" : selectedDepM === "nagad" ? "NAGAD" : "";
-            if (!method) return showToast("❌ Payment method not available");
-            const submitBtn = document.getElementById("dep-submit-btn");
-            if (submitBtn) { submitBtn.disabled = true; submitBtn.style.opacity = ".65"; }
-            showToast("Connecting to secure payment gateway...");
-            try {
-                const response = await fetch("/api/create-deposit", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ amount: String(amt), phone, method })
-                });
-                const result = await response.json().catch(() => ({}));
-                if (!response.ok || result.ok !== true || !result.payUrl) {
-                    throw new Error(result.message || "Payment order could not be created");
-                }
-                showToast("Redirecting to secure payment...");
-                window.location.assign(result.payUrl);
-            } catch (error) {
-                console.error("FZPay deposit error:", error);
-                showToast("❌ " + (error.message || "Payment gateway error"));
-                if (submitBtn) { submitBtn.disabled = false; submitBtn.style.opacity = ""; }
-            }
+        // FzPay TEST MODE: credentials are embedded only because this is a temporary
+        // single-file test. NEVER publish this file or use real funds with this setup.
+        const FZPAY_TEST_CONFIG = {
+            endpoint: "https://fzpay.site/api.php",
+            app_id: "FZ1E7369189F45",
+            secret: "8f335d0da2d1bc0ce0e60ddcc5efc67afa96ceb276640452a8ba30b71b6f922d",
+            action: "deposit"
         };
 
+        function fzPayEncode(value) {
+            return encodeURIComponent(String(value)).replace(/[!'()*]/g, c => "%" + c.charCodeAt(0).toString(16).toUpperCase());
+        }
+
+        async function fzPaySign(fields) {
+            const canonical = Object.keys(fields).filter(k => k !== "sign").sort()
+                .map(k => fzPayEncode(k) + "=" + fzPayEncode(fields[k] === true ? 1 : fields[k] === false ? 0 : fields[k]))
+                .join("&");
+            const key = await crypto.subtle.importKey(
+                "raw", new TextEncoder().encode(FZPAY_TEST_CONFIG.secret),
+                { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+            );
+            const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(canonical));
+            return Array.from(new Uint8Array(signature), b => b.toString(16).padStart(2, "0")).join("");
+        }
+
+        window.goFinalDep = async function() {
+            const dAmtEl = document.getElementById("d-amt");
+            const amount = Number(dAmtEl ? dAmtEl.value : 0);
+            const phone = localStorage.getItem("userPhone");
+            const min = selectedDepM === "binance" ? 1 : Number(adminRuntimeLimits.min_deposit ?? 100);
+            const sym = selectedDepM === "binance" ? "$" : "৳";
+            if (!phone) return showToast("❌ Please login first");
+            if (!Number.isFinite(amount) || amount < min) return showToast(`❌ Minimum deposit ${sym}${min}`);
+            if (selectedDepM !== "binance" && Number(adminRuntimeLimits.max_deposit) > 0 && amount > Number(adminRuntimeLimits.max_deposit)) return showToast(`❌ Maximum deposit ৳${adminRuntimeLimits.max_deposit}`);
+
+            const submitBtn = document.getElementById("dep-submit-btn");
+            if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = "Connecting to FzPay..."; }
+            try {
+                const userSnap = await get(ref(db, "users/" + phone));
+                if (!userSnap.exists()) throw new Error("User account was not found");
+                const userData = userSnap.val() || {};
+                const pendingKey = "fzpay_pending_" + phone + "_" + selectedDepM + "_" + amount;
+                let orderNo = sessionStorage.getItem(pendingKey);
+                if (!orderNo) {
+                    orderNo = "SL" + Date.now() + Math.random().toString(36).slice(2, 8).toUpperCase();
+                    sessionStorage.setItem(pendingKey, orderNo);
+                }
+                const fields = {
+                    app_id: FZPAY_TEST_CONFIG.app_id,
+                    timestamp: Math.floor(Date.now() / 1000),
+                    action: FZPAY_TEST_CONFIG.action,
+                    order_no: orderNo,
+                    amount: amount.toFixed(2),
+                    method: selectedDepM,
+                    name: String(userData.memberName || "StarLight Member"),
+                    phone: String(userData.phone || phone),
+                    email: String(userData.email || localStorage.getItem("userEmail") || "test@example.com"),
+                    // For a real integration this MUST be a server endpoint that receives
+                    // and verifies provider callbacks. The page URL is test-only.
+                    callback_url: window.location.href.split("#")[0]
+                };
+                fields.sign = await fzPaySign(fields);
+                const body = new URLSearchParams();
+                Object.keys(fields).forEach(k => body.append(k, String(fields[k])));
+                showToast("Connecting to FzPay...");
+                const response = await fetch(FZPAY_TEST_CONFIG.endpoint, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8", "Accept": "application/json" },
+                    body: body.toString(),
+                    mode: "cors"
+                });
+                const raw = await response.text();
+                let result = {};
+                try { result = JSON.parse(raw); }
+                catch (_) {
+                    // Some gateways return the checkout URL as plain text.
+                    const plainUrl = raw.trim().replace(/^['\"]|['\"]$/g, "");
+                    if (response.ok && /^https:\/\//i.test(plainUrl)) {
+                        sessionStorage.removeItem(pendingKey);
+                        showToast("✅ Payment page ready. Redirecting...");
+                        window.location.assign(plainUrl);
+                        return;
+                    }
+                    throw new Error("FzPay returned an unreadable response: " + raw.slice(0, 180));
+                }
+                const data = result.data || result.result || result;
+                const payUrl = data.payUrl || data.pay_url || data.payment_url || data.paymentUrl ||
+                    data.checkout_url || data.checkoutUrl || data.redirect_url || data.redirectUrl ||
+                    data.cashier_url || data.cashierUrl || data.url || result.payUrl || result.pay_url ||
+                    result.payment_url || result.checkout_url || result.redirect_url || result.url;
+                if (response.ok && typeof payUrl === "string" && /^https:\/\//i.test(payUrl.trim())) {
+                    sessionStorage.removeItem(pendingKey);
+                    showToast("✅ Payment page ready. Redirecting...");
+                    window.location.assign(payUrl.trim());
+                    return;
+                }
+                if (!response.ok) throw new Error("HTTP " + response.status + ": " + (result.message || result.msg || raw.slice(0, 140)));
+                if (result.accepted === true || result.success === true || result.status === "success" || result.status === "pending") {
+                    showToast("⏳ FzPay accepted the order, but did not provide a checkout URL. Order: " + orderNo);
+                    return;
+                }
+                throw new Error(result.message || result.msg || result.error || result.error_message || "FzPay did not return a payment URL");
+            } catch (err) {
+                console.error("FzPay test checkout error:", err);
+                const msg = String(err && err.message || err);
+                if (/failed to fetch|networkerror|load failed/i.test(msg)) {
+                    showToast("❌ FzPay connection/CORS error. API must allow this website origin.");
+                } else {
+                    showToast("❌ FzPay: " + msg.slice(0, 120));
+                }
+            } finally {
+                if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = (currentLang === "bn" ? "ডিপোজিট" : "Deposit"); }
+            }
+        };
+        
         window.gameStatusHeartbeat = null;
         window.gameStatusRef = null;
         window.playGame = async function(name) {
-            const link = gameLinks[name], phone = localStorage.getItem("userPhone");
+            const link = name === "Tower Jackpot" ? "https://dk-clubtower.vercel.app/" : gameLinks[name], phone = localStorage.getItem("userPhone");
             if (!phone) { showToast("Please login first"); return; }
             // Games without a configured URL (including blank names and "#") open Deposit.
             if (typeof link !== "string" || !link.trim() || link.trim() === "#") {
